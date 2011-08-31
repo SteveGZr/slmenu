@@ -269,6 +269,7 @@ run(void) {
 					read(0, &c, 1);
 					switch(c) {
 						case '1': /* Home */
+						case '7':
 							read(0, &c, 1); /* Remove trailing '~' from stdin */
 							c=CONTROL('A');
 							goto switch_top;
@@ -281,6 +282,7 @@ run(void) {
 							c=CONTROL('D');
 							goto switch_top;
 						case '4': /* End */
+						case '8':
 							read(0, &c, 1); /* Remove trailing '~' from stdin */
 							c=CONTROL('E');
 							goto switch_top;
