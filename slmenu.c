@@ -270,7 +270,8 @@ run(void) {
 					switch(c) {
 						case '1': /* Home */
 						case '7':
-							read(0, &c, 1); /* Remove trailing '~' from stdin */
+						case 'H':
+							if(c!='H') read(0, &c, 1); /* Remove trailing '~' from stdin */
 							c=CONTROL('A');
 							goto switch_top;
 						case '2': /* Insert */
@@ -283,7 +284,8 @@ run(void) {
 							goto switch_top;
 						case '4': /* End */
 						case '8':
-							read(0, &c, 1); /* Remove trailing '~' from stdin */
+						case 'F':
+							if(c!='F') read(0, &c, 1); /* Remove trailing '~' from stdin */
 							c=CONTROL('E');
 							goto switch_top;
 						case '5': /* PageUp */
