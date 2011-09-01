@@ -82,7 +82,7 @@ calcoffsets(void) {
 
 void
 cleanup() {
-	fprintf(stderr, "\033[K");
+	fprintf(stderr, "\033[G\033[K");
 	tcsetattr(0, TCSANOW, &tio_old);
 }
 
