@@ -40,11 +40,12 @@ static void   match(int);
 static size_t nextrune(int);
 static void   readstdin(void);
 static int    run(void);
-static void   setup(int);
+static void   setup(void);
 static size_t textw(const char*);
 static size_t textwn(const char*, int);
 
 static char   text[BUFSIZ] = "";
+static int    barpos = 0;
 static int    mw;
 static int    inputw, promptw;
 static size_t cursor;
@@ -82,7 +83,8 @@ calcoffsets(void) {
 
 void
 cleanup() {
-	fprintf(stderr, "\033[G\033[K");
+	if(barpos==0) fprintf(stderr, "\n");
+	else fprintf(stderr, "\033[G\033[K");
 	tcsetattr(0, TCSANOW, &tio_old);
 }
 
@@ -347,8 +349,11 @@ run(void) {
 			return EXIT_FAILURE;
 		case CONTROL('M'): /* Return */
 		case CONTROL('J'):
-			puts(sel ? sel->text : text);
-			return EXIT_SUCCESS;
+			if(sel) strncpy(text, sel->text, sizeof text); /* Complete the input first, when hitting return */
+			cursor = strlen(text);
+			match(TRUE);
+			drawmenu();
+			/* fallthrough */
 		case CONTROL(']'):
 		case CONTROL('\\'): /* These are usually close enough to RET to replace Shift+RET, again due to console limitations */
 			puts(text);
@@ -452,7 +457,7 @@ run(void) {
 }
 
 void
-setup(int position) {
+setup(void) {
 	int fd, result=-1;
 	struct winsize ws;
 
@@ -484,7 +489,7 @@ setup(int position) {
 	promptw=(prompt?textw(prompt):0);
 	inputw=MIN(inputw, mw/3);
 	match(FALSE);
-	if(position!=0) fprintf(stderr, "\033[%iH", (position>0 || result<0)?0:ws.ws_row);
+	if(barpos!=0) fprintf(stderr, "\033[%iH", (barpos>0 || result<0)?0:ws.ws_row);
 	drawmenu();
 }
 
@@ -504,7 +509,6 @@ textwn(const char *s, int l) {
 int
 main(int argc, char **argv) {
 	int i;
-	int position=0;
 
 	for(i=0; i<argc; i++)
 		if(!strcmp(argv[i], "-v")) {
@@ -516,12 +520,12 @@ main(int argc, char **argv) {
 		else if(!strcmp(argv[i], "-i"))
 			fstrncmp = strncasecmp;
 		else if(!strcmp(argv[i], "-t"))
-			position=1;
+			barpos=1;
 		else if(!strcmp(argv[i], "-b"))
-			position=-1;
+			barpos=-1;
 
 	readstdin();
-	setup(position);
+	setup();
 	i = run();
 	cleanup();
 	return i;
