@@ -42,6 +42,7 @@ static void   readstdin(void);
 static int    run(void);
 static void   setup(int);
 static size_t textw(const char*);
+static size_t textwn(const char*, int);
 
 static char   text[BUFSIZ] = "";
 static int    mw;
@@ -150,8 +151,7 @@ drawmenu(void) {
 		}
 
 	}
-	fprintf(stderr, "\033[%iG", (int)(promptw+cursor+3));
-	/* fprintf(stderr, "\n"); */
+	fprintf(stderr, "\033[%iG", (int)(promptw+textwn(text, cursor)-1));
 }
 
 char*
@@ -490,7 +490,15 @@ setup(int position) {
 
 size_t
 textw(const char *s) {
-	return (s?strlen(s):0)+4;
+	return textwn(s, -1);
+}
+
+size_t
+textwn(const char *s, int l) {
+	int b, c; /* bytes and UTF-8 characters */
+
+	for(b=c=0; s && s[b] && (l<0 || b<l); b++) if((s[b] & 0xc0) != 0x80) c++;
+	return c+4; /* Accomodate for the leading and trailing spaces */
 }
 
 int
