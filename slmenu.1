@@ -6,12 +6,14 @@ slmenu \- single line menu
 .RB [ \-b ]
 .RB [ \-t ]
 .RB [ \-i ]
+.RB [ \-l
+.IR lines ]
 .RB [ \-p
 .IR prompt ]
 .RB [ \-v ]
 .SH DESCRIPTION
 .B slmenu
-is a single line menu for the console, based on the wonderful
+is a dynamic menu for the console, based on the wonderful
 .IR dmenu (1).
 It also manages huge numbers of user\-defined menu items efficiently.
 .P
@@ -29,6 +31,9 @@ slmenu appears in the current line.
 .TP
 .B \-i
 slmenu matches menu items case insensitively.
+.TP
+.BI \-l " lines"
+puts slmenu in multiline mode and chooses the number of lines to display
 .TP
 .BI \-p " prompt"
 defines the prompt to be displayed to the left of the input field.

@@ -9,7 +9,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#define XSEL          "xsel -h >/dev/null 2>&1 && test -n \"$DISPLAY\" && xsel -ob || cat /tmp/.sandy.clipboard.$USER"
+#define XSEL          "xsel -ob 2>/dev/null || cat /tmp/.sandy.clipboard.$USER"
 #define CONTROL(ch)   (ch ^ 0x40)
 #define MIN(a,b)      ((a) < (b) ? (a) : (b))
 #define MAX(a,b)      ((a) > (b) ? (a) : (b))
@@ -40,13 +40,15 @@ static void   match(int);
 static size_t nextrune(int);
 static void   readstdin(void);
 static int    run(void);
+static void   resetline(void);
 static void   setup(void);
 static size_t textw(const char*);
 static size_t textwn(const char*, int);
 
 static char   text[BUFSIZ] = "";
 static int    barpos = 0;
-static int    mw;
+static int    mw, mh;
+static int    lines = 0;
 static int    inputw, promptw;
 static size_t cursor;
 static char  *prompt = NULL;
@@ -71,13 +73,16 @@ void
 calcoffsets(void) {
         int i, n;
 
-	n = mw - (promptw + inputw + textw("<") + textw(">"));
+	if(lines>0)
+		n = lines;
+	else
+		n = mw - (promptw + inputw + textw("<") + textw(">"));
 
         for(i = 0, next = curr; next; next = next->right)
-                if((i += MIN(textw(next->text), n)) > n)
+                if((i += (lines>0 ? 1 : MIN(textw(next->text), n))) > n)
                         break;
         for(i = 0, prev = curr; prev && prev->left; prev = prev->left)
-                if((i += MIN(textw(prev->left->text), n)) > n)
+                if((i += (lines>0 ? 1 : MIN(textw(prev->left->text), n))) > n)
                         break;
 }
 
@@ -114,7 +119,7 @@ drawtext(const char *t, size_t w, Color col) {
 
 	memset(buf, ' ', w);
 	buf[w]='\0';
-	memcpy(buf, t, w);
+	memcpy(buf, t, MIN(strlen(t), w));
 	if(textw(t)-4>w)
 		for(i=MAX((w-4), 0); i<w; i++) buf[i]='.';
 
@@ -135,21 +140,30 @@ drawmenu(void) {
 	fprintf(stderr, "\033[K");
 
 	if(prompt)
-		drawtext(prompt, promptw, C_Reverse);
+		drawtext(prompt, promptw-4, C_Reverse);
 
-	drawtext(text, (matches?inputw:mw-promptw), C_Normal);
+	drawtext(text, ((lines==0 && matches)?inputw:mw-(promptw+4)), C_Normal);
 
-	if(matches) {
-		rw=mw-(promptw+inputw);
+	if(lines>0) {
+		if(barpos!=0) resetline();
+		for(rw=0, item = curr; item != next; rw++, item = item->right) {
+			fprintf(stderr, "\n");
+			drawtext(item->text, mw-4, (item == sel) ? C_Reverse : C_Normal);
+		}
+		for(; rw<lines; rw++)
+			fprintf(stderr, "\n\033[K");
+		resetline();
+	} else if(matches) {
+		rw=mw-(8+promptw+inputw);
 		if(curr->left)
-			drawtext("<", 5, C_Normal);
+			drawtext("<", 1, C_Normal);
 		for(item = curr; item != next; item = item->right) {
-			drawtext(item->text, MIN(textw(item->text), rw), (item == sel) ? C_Reverse : C_Normal);
+			drawtext(item->text, MIN(textw(item->text)-4, rw), (item == sel) ? C_Reverse : C_Normal);
 			if((rw-= textw(item->text)) <= 0) break;
 		}
 		if(next) {
 			fprintf(stderr, "\033[%iG", mw-5);
-			drawtext(">", 5, C_Normal);
+			drawtext(">", 1, C_Normal);
 		}
 
 	}
@@ -240,11 +254,17 @@ readstdin() {
 		if(!(items[i].text = strdup(buf)))
 			die("Can't strdup.");
 		if(strlen(items[i].text) > max)
-			max = strlen(maxstr = items[i].text);
+			max = textw(maxstr = items[i].text);
 	}
 	if(items)
 		items[i].text = NULL;
 	inputw = textw(maxstr);
+}
+
+void
+resetline(void) {
+	if(barpos!=0) fprintf(stderr, "\033[%iH", (barpos>0)?0:(mh-lines));
+	else fprintf(stderr, "\033[%iF", lines);
 }
 
 int
@@ -382,7 +402,7 @@ run(void) {
 			sel = matchend;
 			break;
 		case CONTROL('B'):
-			if(cursor > 0 && (!sel || !sel->left)) {
+			if(cursor > 0 && (!sel || !sel->left || lines > 0)) {
 				cursor = nextrune(-1);
 				break;
 			}
@@ -461,19 +481,24 @@ setup(void) {
 	int fd, result=-1;
 	struct winsize ws;
 
-
 	/* re-open stdin to read keyboard */
 	if(freopen("/dev/tty", "r", stdin) == NULL) die("Can't reopen tty.");
 
 	/* ioctl() the tty to get size */
 	fd = open("/dev/tty", O_RDWR);
-	if(fd == -1)
+	if(fd == -1) {
+		mh=24;
 		mw=80;
-	else {
+	} else {
 		result = ioctl(fd, TIOCGWINSZ, &ws);
 		close(fd);
-		if(result<0) mw=80;
-		mw=ws.ws_col;
+		if(result<0) {
+			mw=80;
+			mh=24;
+		} else {
+			mw=ws.ws_col;
+			mh=ws.ws_row;
+		}
 	}
 
 	/* change terminal attributes, save old */
@@ -486,10 +511,11 @@ setup(void) {
 	tio_new.c_cc[VMIN]=1;
 	tcsetattr(0, TCSANOW, &tio_new);
 
+	lines=MIN(MAX(lines, 0), mh);
 	promptw=(prompt?textw(prompt):0);
 	inputw=MIN(inputw, mw/3);
 	match(FALSE);
-	if(barpos!=0) fprintf(stderr, "\033[%iH", (barpos>0 || result<0)?0:ws.ws_row);
+	if(barpos!=0) resetline();
 	drawmenu();
 }
 
@@ -511,18 +537,22 @@ main(int argc, char **argv) {
 	int i;
 
 	for(i=0; i<argc; i++)
+		/* single flags */
 		if(!strcmp(argv[i], "-v")) {
 			puts("slmenu, © 2011 slmenu engineers, see LICENSE for details");
 			exit(EXIT_SUCCESS);
 		}
-		else if(!strcmp(argv[i], "-p"))
-			prompt=argv[++i];
 		else if(!strcmp(argv[i], "-i"))
 			fstrncmp = strncasecmp;
 		else if(!strcmp(argv[i], "-t"))
 			barpos=1;
 		else if(!strcmp(argv[i], "-b"))
 			barpos=-1;
+		/* double flags */
+		else if(!strcmp(argv[i], "-p"))
+			prompt=argv[++i];
+		else if(!strcmp(argv[i], "-l"))
+			lines = atoi(argv[++i]);
 
 	readstdin();
 	setup();
