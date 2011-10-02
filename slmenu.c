@@ -103,10 +103,12 @@ die(const char *s) {
 void
 drawtext(const char *t, size_t w, Color col) {
 	const char *prestr, *poststr;
-	int i;
+	int i, tw;
 	char *buf;
 
-	if((buf=calloc(1, (w+1))) == NULL) die("Can't calloc.");
+	if(w<5) return; /* This is the minimum size needed to write a label: 1 char + 4 padding spaces */
+	tw=w-4; /* This is the text width, without the padding */
+	if((buf=calloc(1, (tw+1))) == NULL) die("Can't calloc.");
 	switch(col) {
 	case C_Reverse:
 		prestr="\033[7m";
@@ -117,11 +119,11 @@ drawtext(const char *t, size_t w, Color col) {
 		prestr=poststr="";
 	}
 
-	memset(buf, ' ', w);
-	buf[w]='\0';
-	memcpy(buf, t, MIN(strlen(t), w));
-	if(textw(t)-4>w)
-		for(i=MAX((w-4), 0); i<w; i++) buf[i]='.';
+	memset(buf, ' ', tw);
+	buf[tw]='\0';
+	memcpy(buf, t, MIN(strlen(t), tw));
+	if(textw(t)>w) /* Remember textw returns the width WITH padding */
+		for(i=MAX((tw-4), 0); i<tw; i++) buf[i]='.';
 
 	fprintf(stderr, "%s  %s  %s", prestr, buf, poststr);
 	free(buf);
@@ -140,30 +142,30 @@ drawmenu(void) {
 	fprintf(stderr, "\033[K");
 
 	if(prompt)
-		drawtext(prompt, promptw-4, C_Reverse);
+		drawtext(prompt, promptw, C_Reverse);
 
-	drawtext(text, ((lines==0 && matches)?inputw:mw-(promptw+4)), C_Normal);
+	drawtext(text, ((lines==0 && matches)?inputw:mw-promptw), C_Normal);
 
 	if(lines>0) {
 		if(barpos!=0) resetline();
 		for(rw=0, item = curr; item != next; rw++, item = item->right) {
 			fprintf(stderr, "\n");
-			drawtext(item->text, mw-4, (item == sel) ? C_Reverse : C_Normal);
+			drawtext(item->text, mw, (item == sel) ? C_Reverse : C_Normal);
 		}
 		for(; rw<lines; rw++)
 			fprintf(stderr, "\n\033[K");
 		resetline();
 	} else if(matches) {
-		rw=mw-(8+promptw+inputw);
+		rw=mw-(4+promptw+inputw);
 		if(curr->left)
-			drawtext("<", 1, C_Normal);
+			drawtext("<", 5 /*textw("<")*/, C_Normal);
 		for(item = curr; item != next; item = item->right) {
-			drawtext(item->text, MIN(textw(item->text)-4, rw), (item == sel) ? C_Reverse : C_Normal);
+			drawtext(item->text, MIN(textw(item->text), rw), (item == sel) ? C_Reverse : C_Normal);
 			if((rw-= textw(item->text)) <= 0) break;
 		}
 		if(next) {
 			fprintf(stderr, "\033[%iG", mw-5);
-			drawtext(">", 1, C_Normal);
+			drawtext(">", 5 /*textw(">")*/, C_Normal);
 		}
 
 	}
